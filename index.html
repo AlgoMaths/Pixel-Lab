@@ -128,9 +128,10 @@
                             <!-- Boutons générés par JS -->
                         </div>
 
-                        <div id="threshold-container" class="mt-6 p-4 bg-indigo-50 rounded-xl border border-indigo-100 hidden">
-                            <label class="block text-xs font-bold text-indigo-700 uppercase mb-2">Valeur du Seuil: <span id="threshold-val">128</span></label>
-                            <input type="range" id="threshold-range" min="0" max="255" value="128" class="w-full accent-indigo-600">
+                        <!-- Curseur dynamique pour le seuil OU la taille des pixels -->
+                        <div id="parameter-container" class="mt-6 p-4 bg-indigo-50 rounded-xl border border-indigo-100 hidden">
+                            <label id="param-label" class="block text-xs font-bold text-indigo-700 uppercase mb-2">Paramètre: <span id="param-val">128</span></label>
+                            <input type="range" id="param-range" min="1" max="255" value="128" class="w-full accent-indigo-600">
                         </div>
                     </div>
                 </div>
@@ -140,7 +141,13 @@
                     <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center">
                         <div class="w-full flex justify-between items-center mb-4 px-2">
                             <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Aperçu du rendu</span>
-                            <span id="processing-badge" class="hidden text-xs text-indigo-500 font-bold animate-pulse">Calcul...</span>
+                            <div class="flex items-center gap-4">
+                                <span id="processing-badge" class="hidden text-xs text-indigo-500 font-bold animate-pulse">Calcul...</span>
+                                <button onclick="downloadImage()" class="flex items-center gap-2 text-xs font-bold bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700 transition shadow-sm">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                    Télécharger
+                                </button>
+                            </div>
                         </div>
                         <div class="relative overflow-hidden rounded-lg bg-slate-200 shadow-inner w-full min-h-[300px] flex items-center justify-center border border-slate-200">
                             <canvas id="main-canvas" class="max-w-full h-auto block shadow-2xl"></canvas>
@@ -181,9 +188,10 @@
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
         const fileInput = document.getElementById('file-input');
         const effectsList = document.getElementById('effects-list');
-        const thresholdContainer = document.getElementById('threshold-container');
-        const thresholdRange = document.getElementById('threshold-range');
-        const thresholdVal = document.getElementById('threshold-val');
+        const paramContainer = document.getElementById('parameter-container');
+        const paramRange = document.getElementById('param-range');
+        const paramVal = document.getElementById('param-val');
+        const paramLabel = document.getElementById('param-label');
         const badge = document.getElementById('processing-badge');
 
         let currentImage = null;
@@ -207,8 +215,24 @@
             },
             threshold: {
                 name: "Seuillage",
-                desc: "Binarisation de l'image : passage en noir ou blanc pur selon un seuil.",
-                formula: "Si Moyenne > Seuil ? 255 : 0"
+                desc: "Binarisation de l'image : passage en noir ou blanc pur selon un seuil réglable.",
+                formula: "Gris > Seuil ? 255 : 0",
+                hasParam: true,
+                paramName: "Seuil",
+                min: 0, max: 255, def: 128
+            },
+            pixelate: {
+                name: "Pixellisation",
+                desc: "Réduction de la résolution apparente en regroupant les pixels par blocs de couleur.",
+                formula: "Pixel(x,y) = Pixel(bloc_x, bloc_y)",
+                hasParam: true,
+                paramName: "Taille Bloc",
+                min: 2, max: 50, def: 10
+            },
+            convolution: {
+                name: "Convolution",
+                desc: "Application d'un noyau de filtrage 3x3 pour accentuer les contrastes et les détails.",
+                formula: "P' = Σ(P_voisins * Noyau)",
             },
             mirror: {
                 name: "Miroir",
@@ -273,6 +297,8 @@
 
         function selectEffect(key) {
             activeEffect = key;
+            const effect = effects[key];
+            
             document.querySelectorAll('.effect-btn').forEach(b => {
                 b.classList.remove('bg-indigo-50', 'text-indigo-700', 'ring-2', 'ring-indigo-200');
                 b.querySelector('.indicator').style.opacity = '0';
@@ -283,11 +309,21 @@
                 activeBtn.querySelector('.indicator').style.opacity = '1';
             }
 
-            thresholdContainer.classList.toggle('hidden', key !== 'threshold');
+            // Gérer les paramètres
+            if (effect.hasParam) {
+                paramContainer.classList.remove('hidden');
+                paramRange.min = effect.min;
+                paramRange.max = effect.max;
+                paramRange.value = effect.def;
+                paramVal.innerText = effect.def;
+                paramLabel.innerHTML = `${effect.paramName}: <span id="param-val">${effect.def}</span>`;
+            } else {
+                paramContainer.classList.add('hidden');
+            }
             
-            document.getElementById('effect-title').innerText = `Algorithme : ${effects[key].name}`;
-            document.getElementById('effect-desc').innerText = effects[key].desc;
-            document.getElementById('effect-formula').innerText = effects[key].formula;
+            document.getElementById('effect-title').innerText = `Algorithme : ${effect.name}`;
+            document.getElementById('effect-desc').innerText = effect.desc;
+            document.getElementById('effect-formula').innerText = effect.formula;
 
             processImage();
         }
@@ -311,8 +347,8 @@
             reader.readAsDataURL(file);
         };
 
-        thresholdRange.oninput = (e) => {
-            thresholdVal.innerText = e.target.value;
+        paramRange.oninput = (e) => {
+            document.getElementById('param-val').innerText = e.target.value;
             processImage();
         };
 
@@ -321,7 +357,7 @@
             
             badge.classList.remove('hidden');
 
-            const maxWidth = 600;
+            const maxWidth = 800;
             const scale = Math.min(1, maxWidth / currentImage.width);
             canvas.width = currentImage.width * scale;
             canvas.height = currentImage.height * scale;
@@ -329,28 +365,59 @@
             ctx.drawImage(currentImage, 0, 0, canvas.width, canvas.height);
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const data = imageData.data;
-            const threshold = parseInt(thresholdRange.value);
+            const width = imageData.width;
+            const height = imageData.height;
+            const pValue = parseInt(paramRange.value);
 
             if (activeEffect === 'mirror') {
                 const temp = new Uint8ClampedArray(data);
-                const w = imageData.width;
-                const h = imageData.height;
-                for (let y = 0; y < h; y++) {
-                    for (let x = 0; x < w; x++) {
-                        const src = (y * w + x) * 4;
-                        const target = (y * w + (w - 1 - x)) * 4;
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const src = (y * width + x) * 4;
+                        const target = (y * width + (width - 1 - x)) * 4;
                         data[target] = temp[src];
                         data[target + 1] = temp[src + 1];
                         data[target + 2] = temp[src + 2];
                         data[target + 3] = temp[src + 3];
                     }
                 }
+            } else if (activeEffect === 'pixelate') {
+                const size = pValue;
+                for (let y = 0; y < height; y += size) {
+                    for (let x = 0; x < width; x += size) {
+                        const i = (y * width + x) * 4;
+                        const r = data[i], v = data[i+1], b = data[i+2];
+                        for (let dy = 0; dy < size && (y + dy) < height; dy++) {
+                            for (let dx = 0; dx < size && (x + dx) < width; dx++) {
+                                const target = ((y + dy) * width + (x + dx)) * 4;
+                                data[target] = r;
+                                data[target+1] = v;
+                                data[target+2] = b;
+                            }
+                        }
+                    }
+                }
+            } else if (activeEffect === 'convolution') {
+                const kernel = [0, -1, 0, -1, 5, -1, 0, -1, 0];
+                const temp = new Uint8ClampedArray(data);
+                for (let y = 1; y < height - 1; y++) {
+                    for (let x = 1; x < width - 1; x++) {
+                        for (let c = 0; c < 3; c++) {
+                            let sum = 0;
+                            for (let ky = -1; ky <= 1; ky++) {
+                                for (let kx = -1; kx <= 1; kx++) {
+                                    const pixelIdx = ((y + ky) * width + (x + kx)) * 4 + c;
+                                    const kernelIdx = (ky + 1) * 3 + (kx + 1);
+                                    sum += temp[pixelIdx] * kernel[kernelIdx];
+                                }
+                            }
+                            data[(y * width + x) * 4 + c] = Math.min(255, Math.max(0, sum));
+                        }
+                    }
+                }
             } else {
                 for (let i = 0; i < data.length; i += 4) {
-                    const r = data[i];
-                    const v = data[i + 1];
-                    const b = data[i + 2];
-
+                    const r = data[i], v = data[i + 1], b = data[i + 2];
                     switch (activeEffect) {
                         case 'grayscale':
                             const gray = 0.299 * r + 0.587 * v + 0.114 * b;
@@ -363,12 +430,11 @@
                             break;
                         case 'threshold':
                             const avg = (r + v + b) / 3;
-                            const val = avg > threshold ? 255 : 0;
+                            const val = avg > pValue ? 255 : 0;
                             data[i] = data[i + 1] = data[i + 2] = val;
                             break;
                         case 'redChannel':
-                            data[i + 1] = 0;
-                            data[i + 2] = 0;
+                            data[i + 1] = 0; data[i + 2] = 0;
                             break;
                     }
                 }
@@ -376,6 +442,14 @@
 
             ctx.putImageData(imageData, 0, 0);
             badge.classList.add('hidden');
+        }
+
+        function downloadImage() {
+            if (!canvas) return;
+            const link = document.createElement('a');
+            link.download = `image-traitee-${activeEffect}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
         }
 
         window.onload = init;
