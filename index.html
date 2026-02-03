@@ -39,7 +39,7 @@
                 <img src="vignette.png" alt="Illustration Traitement d'Image" class="w-full h-full object-cover" onerror="this.style.display='none'; this.parentElement.classList.add('flex','items-center','justify-center'); this.parentElement.innerHTML='<span class=\'text-indigo-300 font-bold text-sm\'>vignette.png</span>';">
                 <!-- Étiquette -->
                 <div class="absolute bottom-2 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest text-indigo-700 shadow-sm">
-                    Illustration
+                    SNT & NSI
                 </div>
             </div>
         </header>
@@ -216,7 +216,7 @@
             threshold: {
                 name: "Seuillage",
                 desc: "Binarisation de l'image : passage en noir ou blanc pur selon un seuil réglable.",
-                formula: "Gris > Seuil ? 255 : 0",
+                formula: "Si Gris > Seuil alors 255 sinon 0",
                 hasParam: true,
                 paramName: "Seuil",
                 min: 0, max: 255, def: 128
